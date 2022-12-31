@@ -1,6 +1,8 @@
 #!/bin/bash
 
+curdir="$(pwd)"
+
 cd "$(dirname "$0")"
 
-pipenv run python launcher.py "$@"
+exec pipenv run python launcher.py --curdir "$curdir" "$@"
 

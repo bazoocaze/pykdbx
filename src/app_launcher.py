@@ -10,7 +10,8 @@ def create_arg_parser():
     parser.add_argument("-p", type=str, metavar="password", help="password for kdbx file", dest="password")
     parser.add_argument("-f", type=str, metavar="database", help="kdbx filename", dest="database_path")
     parser.add_argument("-k", type=str, metavar="keyfile", help="kdbx secret keyfile", dest="keyfile")
-    command_parser = parser.add_subparsers(dest="command", title="commands")
+    parser.add_argument("--curdir", type=str)
+    command_parser = parser.add_subparsers(dest="command", title="commands", required=True)
     create_command = command_parser.add_parser("create", help="create database")
     ls_command = command_parser.add_parser("ls", help="list entries")
     ls_command.add_argument("source", help="source path")
@@ -32,17 +33,15 @@ def create_arg_parser():
 
 def parse_args(args=None):
     parser = create_arg_parser()
-    args = parser.parse_args(args)
-    if not args.command:
-        parser.print_help()
-    return args
+    return parser.parse_args(args)
 
 
 def run(args=None):
     args = parse_args(args)
     app = App(args, Cache(), sys.stdout)
     if args.command == "create":
-        app.create()
+        if not app.create():
+            return 1
     elif args.command == "ls":
         if not app.ls_entries():
             return 1

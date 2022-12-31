@@ -38,6 +38,7 @@ def args_fixture(database_path=TEST_KDBX, password=DEFAULT_PASS, keyfile="", sou
     args.entry_path = entry_path
     args.entry_value = entry_value
     args.output_file = output_file
+    args.curdir = None
     return args
 
 

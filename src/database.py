@@ -18,19 +18,23 @@ class DatabaseEntry:
 
 
 class KeyValue(DatabaseEntry):
-    def __init__(self, kdb: PyKeePass, entry: Entry):
+    def __init__(self, kdb: PyKeePass, entry: Entry, use_full_name: bool = True):
         self._kdb = kdb
         self._entry = entry
+        self._use_full_name = use_full_name
 
     def __str__(self):
-        return "KeyValue(name={})".format(self._entry.title)
+        return "KeyValue(name={})".format(self.name)
 
     def __repr__(self):
         return self.__str__()
 
     @property
     def name(self) -> str:
-        return self._entry.title
+        if self._use_full_name and self._entry.username:
+            return "{}({})".format(self._entry.title, self._entry.username)
+        else:
+            return self._entry.title
 
     @property
     def value(self):
@@ -68,8 +72,10 @@ class File(DatabaseEntry):
         self._attachment.id = self._kdb.add_binary(value)
 
     def delete(self):
+        bin_id = self._attachment.id
         self._attachment.delete()
-        if not self._entry.attachments:
+        self._kdb.delete_binary(bin_id)
+        if not (self._entry.attachments or self._entry.password):
             self._entry.delete()
 
     def __str__(self):
@@ -110,8 +116,9 @@ class Folder(DatabaseEntry):
         for item in self._kdb_group.entries:
             if item.username or item.password or not item.attachments:
                 yield KeyValue(self._kdb, item)
-            for attachment in item.attachments:
-                yield File(self._kdb, item, attachment)
+            if item.attachments:
+                for attachment in item.attachments:
+                    yield File(self._kdb, item, attachment)
 
     def put_file(self, filename: str, contents: bytes):
         if not filename:

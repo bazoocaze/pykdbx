@@ -6,22 +6,29 @@ from src.database import KeyValue, File
 
 
 class App:
-    def __init__(self, args, cache, out=sys.stdout):
+    def __init__(self, args, cache, out=sys.stdout, stdin=sys.stdin):
         self.args = args
         self.cache = cache
         self.out = out
+        self.stdin = stdin
 
     def create(self):
         database_path = self._resolve_database_path()
         password = self.args.password or password_generator.generate(config.CONFIG["generate_password_size"])
         keyfile = self.args.keyfile
 
-        db = database.create_database(database_path, password=password, keyfile=keyfile)
-        db.save()
+        if not os.path.exists(database_path):
+            db = database.create_database(database_path, password=password, keyfile=keyfile)
+            db.save()
+            self.out.write("Database created: {}\n".format(database_path))
+        else:
+            sys.stderr.write("Database already exists: {}\n".format(database_path))
+            return False
 
         self.cache.data.setdefault("databases", {}).setdefault(database_path, {})["password"] = password
         self.cache.data["last_database"] = database_path
         self.cache.save()
+        return True
 
     def set_entry(self):
         db = self._open_database()
@@ -47,7 +54,7 @@ class App:
         entry = db.get_entry(source)
         if entry and isinstance(entry, File):
             if self.args.output_file:
-                with open(self.args.output_file, "bw") as f:
+                with open(self._resolve_path(self.args.output_file), "bw") as f:
                     f.write(entry.contents)
             else:
                 self.out.write("{}".format(entry.contents.decode("utf-8")))
@@ -57,7 +64,7 @@ class App:
         return None
 
     def put_file(self):
-        with open(self.args.source, "br") as f:
+        with open(self._resolve_path(self.args.source), "br") as f:
             db = self._open_database()
             data = f.read()
             target_dir = db.mk_dir(self.args.destination) if self.args.destination else db.root_directory
@@ -67,7 +74,7 @@ class App:
 
     def _open_database(self):
         database_path = self._resolve_database_path()
-        password = self.args.password or self._cache_get_database_entry(database_path, "password")
+        password = self._resolve_password(database_path)
         keyfile = self.args.keyfile or self._cache_get_database_entry(database_path, "keyfile")
         return database.open_database(filename=database_path, password=password, keyfile=keyfile)
 
@@ -75,7 +82,7 @@ class App:
         database_path = self.args.database_path or self.cache.data.get("last_database")
         if not database_path:
             raise Exception("Database filename not informed")
-        return os.path.abspath(database_path)
+        return os.path.abspath(self._resolve_path(database_path))
 
     def _cache_get_database_entry(self, database_path: str, entry_name: str):
         return self.cache.data.get("databases", {}).get(database_path, {}).get(entry_name)
@@ -116,3 +123,19 @@ class App:
         self.cache.data.setdefault("databases", {}).setdefault(database_path, {})["password"] = password
         self.cache.data.setdefault("databases", {}).setdefault(database_path, {})["keyfile"] = keyfile
         self.cache.save()
+
+    def _resolve_path(self, input_path):
+        if self.args.curdir:
+            return os.path.abspath(os.path.join(self.args.curdir, input_path))
+        return input_path
+
+    def _resolve_password(self, database_path: str):
+        password = self.args.password or self._cache_get_database_entry(database_path, "password")
+        if not password:
+            self.out.write("Please inform the password:\n")
+            typed_password = self.stdin.readline()
+            if typed_password.endswith('\n'):
+                typed_password = typed_password[:-1]
+            self.args.password = typed_password
+            return typed_password
+        return password
